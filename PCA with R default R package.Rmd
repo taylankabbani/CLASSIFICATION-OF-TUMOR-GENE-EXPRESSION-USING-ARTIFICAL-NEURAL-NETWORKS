@@ -1,0 +1,103 @@
+---
+title: "PCA with R default R package"
+output: html_document
+---
+#Converting data, where genes become columns and samples are rows:
+```{r}
+sample<- readRDS("brca_tidy_wide.rds")
+
+brca_data <- sample %>%
+ gather("sample", "value", -gene)%>%
+  group_by(gene)%>%
+  filter(sum(value) > 0)%>%
+  ungroup() %>% 
+  spread(gene, value)%>%
+  separate(sample, c("patient", "case", "stage"), sep = "_") 
+```
+
+#converting the data into a matrix: 
+```{r}
+brca_matrix <- as.matrix(brca_data[,4:ncol(brca_data)])
+row.names(brca_matrix) <- brca_data$patient
+#converting cases to a numeric vector:
+cases <- as.numeric(brca_data$case == "Primary solid Tumor","Metastatic")
+```
+
+
+
+#checking if the data need scaling :
+```{r}
+round(colMeans(brca_matrix))
+round(apply(brca_matrix, 2, sd))
+```
+
+
+#PCA:
+```{r}
+brca_pca <- prcomp(brca_matrix, center = T, scale = T)
+
+#EigenVectors(PC):
+
+eigenvectors <- as.data.frame(brca_pca$rotation)
+dim(eigenvectors) 
+View(eigenvectors)
+#each eigenvector represent PC, usually the matrix should be squerd with dim= ncol of the original matrix
+# but when number of rows(samples) =< columns(genes) , the number of PC cannot exceed the number of samples(rows).
+
+#Scores:
+scores <- brca_pca$x
+
+#cumulative proportion of variance explained:
+View(as.data.frame(summary(brca_pca)$importance[3,]))
+# 80% of our data is explained by 350 PC
+
+#loading scores :
+loading_scores <- eigenvectors %>% 
+  select(num_range("PC", 1:3)) %>% 
+  abs() 
+  sa <- apply(loading_scores, 1, max)%>% sort(decreasing = T)
+
+```
+
+
+#plot variance explained for each PC ( identifying how many of the components are needed to summarise the data):
+```{r}
+plot(brca_pca, xlab = "principal Component")
+
+pr.var <- brca_pca$sdev ^ 2
+pve <- pr.var/sum(pr.var) 
+
+plot(pve, xlab = "principal Component", ylab = "Proportion of Variance Explained",
+     ylim = c(0,1) ,xlim = c(0,30), type = "b")
+```
+
+
+#plot with ggplot: 
+```{r}
+brca_plot <- as.data.frame(cbind(cases, brca_pca$x[,c(1,2)]))
+
+ggplot(brca_plot, aes(PC1, PC2, col = cases, fill = cases ))+
+  stat_ellipse(geom = "polygon", col ="red", alpha = 0.5)+
+  geom_point(shape =21 , col ="black")
+```
+
+
+#Examine some of the selected genes
+```{r}
+brca_data%>%
+  select(case, `ENSG00000077463-51548`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000077463-51548`))
+brca_data%>%
+  select(case, `ENSG00000135077-84868`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000135077-84868`))
+brca_data%>%
+  select(case, `ENSG00000099260-54873`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000099260-54873`))
+brca_data%>%
+  select(case, `ENSG00000183386-2275`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000183386-2275`))
+brca_data%>%
+  select(case, `ENSG00000153002-1360`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000153002-1360`))
+```
+

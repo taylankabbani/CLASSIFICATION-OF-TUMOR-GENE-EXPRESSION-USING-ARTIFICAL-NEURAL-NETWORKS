@@ -1,0 +1,100 @@
+
+```{r}
+library(FactoMineR) #for the analysis
+library(factoextra) #for ggplot2-based visualization
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+sample<- readRDS("brca_tidy_wide.rds")
+```
+#Converting data, where genes become columns and samples are rows+ log function:
+```{r}
+brca_data <- sample %>%
+  gather("sample", "value", -gene)%>%
+  group_by(gene)%>%
+  filter(sum(value) > 0)%>%
+  ungroup() %>% 
+  mutate(value = ifelse(value < 1, 1, value)) %>% 
+  mutate(value = log(value)) %>% 
+  spread(gene, value)%>%
+  separate(sample, c("patient", "case", "stage"), sep = "_")
+```
+#converting the data into a matrix:
+```{r}
+brca_matrix <- as.matrix(brca_data[,4:ncol(brca_data)])
+row.names(brca_matrix) <- brca_data$patient
+
+#converting cases to a numeric vector:
+cases <- as.numeric(brca_data$case == "Primary solid Tumor","Metastatic",
+                    "Solid Tissue Normal")
+```
+#PCA:
+```{r}
+res.pca<- PCA(brca_matrix, scale.unit = F,ncp =233,  graph = F)
+```
+#Eigenvalue:
+```{r}
+eig.val <- get_eigenvalue(res.pca) 
+
+#plot of eigenvalues ordered from largest to the smallest
+fviz_eig(res.pca, addlabels = TRUE, ylim = c(0, 50))
+#number of PC we retain: 233 because it explains 80% of data variation
+```
+#gene selection according to their contribution to the 233 chosen PCs:
+```{r}
+var <- get_pca_var(res.pca)
+
+top_genes<- apply(var$contrib, 1, max) %>% sort(decreasing = T) %>% 
+  head(784)
+selected_genes <- as.data.frame(names(top_genes))
+names(selected_genes)[1]<-paste("gene")
+```
+#expression of selected genes:\
+```{r}
+brca_data%>%
+  select(case, `ENSG00000016402-53832`) %>% group_by(case) %>%
+  summarise(agv= mean(`ENSG00000016402-53832`))
+```
+# simple plot by PC1 & PC2
+```{r}
+ind <- get_pca_ind(res.pca)
+ind_pc1 <- as.data.frame(ind$coord[,1:233])
+ggplot(ind_pc1, aes(ind$coord[,1], ind$coord[,2], col = brca_data$case, 
+                      fill = brca_data$case))+
+  stat_ellipse(geom = "polygon", col ="black", alpha = 0.2)+
+  geom_point(shape =21 , col ="black")+
+  labs(title ="BRCA Samples explained by PC1 & PC2", x = "PC1" , y = "PC2")+
+  theme(legend.position = "top")+
+  scale_fill_discrete(name = "Case : ")
+```
+
+```{r}
+saveRDS(selected_genes, "selected_genes_pca.rds")
+```
+# This section is repeated in "first-run-v2":
+
+#selected Genes:
+```{r}
+d <- selected_genes%>% 
+  inner_join(sample) %>% 
+  gather(sample, value, -gene) %>% 
+  mutate(value =ifelse(value < 1, 1, value)) %>% 
+  #separate(sample, c("patient", "case", "stage"), sep="_") %>% 
+  mutate(log_value = log(value)) %>% 
+  select(-value) %>% 
+  spread(sample, log_value) %>% 
+  select(2:1216) %>% 
+  as.matrix(byrow = T)
+```
+#samples multidimensional array:
+```{r}
+class(d)
+dim(d)
+sample_array<- array(d) %>% 
+dim(sample_array) <- c(28,28,1215)
+sample_array <- aperm(sample_array, c(3,1,2))
+class(sample_array)
+dim(sample_array)
+sample_array[1, , ]
+```
+

@@ -1,0 +1,75 @@
+---
+title: 'ggpubr: Publication Ready Plots'
+author: "Taylan Kabbani"
+date: "May 5, 2018"
+output: pdf_document
+---
+
+#reshaping the data:
+```{r}
+library(tidyverse)
+
+
+data <- all_cancer_labeled %>%
+  gather("sample", "value", -gene)%>%
+  mutate(value = ifelse(value < 1, 1, value)) %>% 
+  mutate(value = log(value)) %>% 
+  spread(gene, value) %>%
+  separate(sample, c("patient", "case", "stage"), sep = "_") %>% 
+  separate(patient, c("unknown", "gene")) %>% 
+  select(-unknown,-case,-stage) %>% 
+  group_by(gene) %>% 
+  summarise_each(funs(mean)) %>% 
+  as.matrix() %>% 
+  t() 
+colnames(data) <- data[1,] 
+data <- as.data.frame(data[-1,])
+
+```
+
+
+```{r}
+library(ggpubr)
+# Load the bioconductor installer. 
+source("https://bioconductor.org/biocLite.R")
+# Install the main RTCGA package
+biocLite("RTCGA")
+```
+
+```{r}
+library(RTCGA)
+infoTCGA()
+#RTCGA_workflow.pdf:
+# https://github.com/RTCGA/RTCGA/blob/master/RTCGA_workflow.pdf
+```
+
+```{r}
+# Install the clinical and mRNA gene expression data packages
+biocLite("RTCGA.rnaseq")
+# Install the clinical and mRNA gene expression data packages
+biocLite("RTCGA.clinical")
+biocLite("RTCGA.mRNA")
+```
+
+```{r}
+library(RTCGA.mRNA)
+#extracting the mRNAseq expression for four genes of interest from our 784 chosen genes - STC2,ESR1,TSPAN8,KRT6A - from 3 different data sets: BRCA, COAD and LUSC :
+expr <- expressionsTCGA(BRCA.mRNA, extract.cols = c("ZIM2", "MGAM","POLR2J2"))
+expr$dataset <- gsub(pattern = ".mRNA", replacement = "",  expr$dataset)
+expr <- expr %>% rename("ENSG00000269699-5178" ="ZIM2", "ENSG00000257335-8972" = "MGAM",
+                        "ENSG00000267645-246721" = "POLR2J2")
+```
+
+```{r}
+ggboxplot(expr, x = "dataset",
+          y = c("ENSG00000269699-5178", "ENSG00000257335-8972","ENSG00000267645-246721"),
+          combine = TRUE,
+          color = "dataset", palette = "jco",
+          ylab = "Expression", 
+          add = "jitter",                              
+          add.params = list(size = 0.1, jitter = 0.2) ) 
+
+```
+
+
+
